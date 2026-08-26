@@ -1,31 +1,9 @@
 # TODO: Section 2 "Computer Vision" Project
 import cv2
 import numpy as np
-from numpy.linalg import inv
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
-
-def KalmanFilter(mu_prev, sigma_prev, z):
-    mu_bar = A_t.dot(mu_prev)
-    sigma_bar = A_t.dot(sigma_prev).dot(A_t.transpose()) + R_t
-    if z is None:
-        return mu_bar, sigma_bar
-    else:
-        K_t = sigma_bar.dot(C_t.transpose()).dot(inv(C_t.dot(sigma_bar).dot(C_t.transpose()) + Q_t))
-        mu = mu_bar + K_t.dot(z - C_t.dot(mu_bar))
-        sigma = (np.identity(2) - K_t.dot(C_t)).dot(sigma_bar)
-        return mu, sigma
-
-
-# Kalman filter 변수 정의
-A_t = np.array([[1, 1], [0, 1]])
-G = np.array([[0.5], [1]])
-R_t = G.dot(G.transpose())
-C_t = np.array([[1, 0]])
-Q_t = np.array([[1]])
-mu_t = np.array([[0, 0], [0, 0]])
-sigma_t = np.array([[0, 0], [0, 0]])
 
 # 초록 LAB lower/upper range
 green_lower = np.array([30, 60, 90], dtype=np.uint8)
@@ -33,13 +11,6 @@ green_upper = np.array([230, 115, 180], dtype=np.uint8)
 
 # Morphological operation용 타원형 kernel
 kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-
-# 객체 최초 검출 여부 확인용 boolean
-found = False
-
-# 객체 좌표 및 반지름 변수 정의
-x_bel, y_bel = 0, 0
-radius = 0
 
 # 중간 점 기준으로 각도 계산하는 함수
 def calculate_angle(p1, p2, p3):
@@ -128,6 +99,7 @@ while True:
 
     # 감지된 모든 손에서 펼쳐진 손가락 개수 계산
     total_finger_count = 0
+    my_status = "^_^"
     for hand in result.hand_landmarks:
         for point1_idx, point2_idx, point3_idx in finger_angle_points:
             angle = calculate_angle(
@@ -139,9 +111,14 @@ while True:
             if angle >= angle_threshold:
                 total_finger_count += 1
 
+        if total_finger_count == 3:
+            my_status = "Hungry"
+        else: my_status = "뭘봐"
+
     # 화면 좌측 상단에 손 개수와 펼친 손가락 개수 표시
     cv2.putText(frame, f"Hands: {len(result.hand_landmarks)}", (20,35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
     cv2.putText(frame, f"Fingers: {total_finger_count}", (20,70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
+    cv2.putText(frame, f"Status: {my_status}", (20,105), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
 
     # 화면 우측 상단에 왼손/오른손/양손 여부 표시
     handedness_text = " / ".join(labels)
@@ -179,25 +156,8 @@ while True:
             cv2.circle(frame, center, int(radius), (255, 0, 0), 2)
             cv2.circle(frame, center, 5, (255, 0, 0), -1)
 
-            # 객체 최초 검출
-            if not found:
-                found = True
 
-    # 최초 검출 이후 Kalman Filter 적용
-    # 측정값 사용 (visible) -> Prediction & Update
-    if found and (len(contour_lst) > 0):
-        mu_t, sigma_t = KalmanFilter(mu_t, sigma_t, np.array([list(center)]))
-        x_bel, y_bel = mu_t[0][0], mu_t[0][1]
-
-    # 측정값 미사용 (occluded) -> Prediction
-    elif found and (len(contour_lst) <= 0):
-        mu_t, sigma_t = KalmanFilter(mu_t, sigma_t, None)
-        x_bel, y_bel = mu_t[0][0], mu_t[0][1]
-
-    # 예측한 객체 위치에 노란 원 overlay
-    cv2.circle(frame, (int(x_bel), int(y_bel)), int(radius), (0, 255, 255), 2)
-    cv2.circle(frame, (int(x_bel), int(y_bel)), 5, (0, 255, 255), -1)
-
+    
     cv2.imshow("MediaPipe Detection", frame)
 
 hand_detector.close()
